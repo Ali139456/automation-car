@@ -16,8 +16,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    await runOnce();
-    return NextResponse.json({ ok: true });
+    const report = await runOnce();
+    return NextResponse.json({ ok: true, report });
   } catch (e) {
     console.error("[api/cron]", e);
     return NextResponse.json({ error: "Scan failed" }, { status: 500 });

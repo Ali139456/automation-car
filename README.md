@@ -45,6 +45,26 @@ npm install
 npm run dev
 ```
 
+#### Gumtree / Carsales returning 403 in logs?
+
+These sites often serve **bot / JS challenge** pages to plain `axios` requests. This project can automatically fall back to **Playwright (Chromium)** when it detects a challenge page (enabled by default via `USE_PLAYWRIGHT=true`).
+
+1. Install the browser once:
+
+```bash
+npm run playwright:install
+```
+
+2. Set env in `.env.local` (see `.env.example`):
+
+- `USE_PLAYWRIGHT=true`
+- `PLAYWRIGHT_HEADLESS=true` (or `false` to debug)
+- `PLAYWRIGHT_TIMEOUT_MS=60000`
+
+3. Restart `npm run dev` and hit `/api/cron` again.
+
+Note: if a site updates protections further, you may still need a **residential proxy** / manual cookies — but Playwright is the most practical “easy + reliable” self-hosted first step.
+
 Cron **does not** run in `next dev` the same way as production; use `/api/cron` with `CRON_SECRET` to trigger a scan while developing, or run `npm run build && npm run start`.
 
 ### 5. Railway
