@@ -70,12 +70,19 @@ Cron **does not** run in `next dev` the same way as production; use `/api/cron` 
 ### 5. Railway
 
 1. Connect the repo and set the same env vars as `.env.example`.  
-2. Start command: `npm run start` (runs `next start`).  
-3. Either keep `ENABLE_CRON=true` for built-in polling, **or** set `ENABLE_CRON=false` and add **Railway Cron** hitting:
+2. **Use Docker deploy** (recommended): this repo includes `Dockerfile` which installs **Playwright Chromium + OS dependencies** during the image build.  
+   - In Railway, set the service **Root Directory** to `car-monitor-next` (if your GitHub repo contains multiple projects).  
+   - Configure the service to build from the `Dockerfile` (disable default Nixpacks builder if Railway picks it automatically).  
+3. Start command is already `npm run start` in the Docker image (`next start`).  
+4. Either keep `ENABLE_CRON=true` for built-in polling, **or** set `ENABLE_CRON=false` and add **Railway Cron** hitting:
 
    `GET https://<your-host>/api/cron?secret=<CRON_SECRET>`
 
    on your desired interval (e.g. every 5 minutes).
+
+#### Common Railway error: “Executable doesn't exist … ms-playwright …”
+
+That means the deployed container **does not have Playwright browsers installed**. Fix by using the provided **`Dockerfile`** (or run `npx playwright install --with-deps chromium` during your build image).
 
 ## Project layout
 
