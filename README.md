@@ -71,8 +71,8 @@ Cron **does not** run in `next dev` the same way as production; use `/api/cron` 
 
 1. Connect the repo and set the same env vars as `.env.example`.  
 2. **Use Docker deploy** (recommended): this repo includes `Dockerfile` which installs **Playwright Chromium + OS dependencies** during the image build.  
-   - In Railway, set the service **Root Directory** to `car-monitor-next` (if your GitHub repo contains multiple projects).  
-   - Configure the service to build from the `Dockerfile` (disable default Nixpacks builder if Railway picks it automatically).  
+   - **Root Directory:** leave it **empty** (repo root) for `Ali139456/automation-car` — the Next app and `Dockerfile` live at the top level. Only set a subfolder (e.g. `apps/web`) if your GitHub repo is a monorepo and the app is not at the root.  
+   - Configure the service to build from the `Dockerfile` (disable default Nixpacks / Railpack builder if Railway does not pick Docker automatically).  
 3. Start command is already `npm run start` in the Docker image (`next start`).  
 4. Either keep `ENABLE_CRON=true` for built-in polling, **or** set `ENABLE_CRON=false` and add **Railway Cron** hitting:
 
