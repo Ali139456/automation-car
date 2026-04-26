@@ -6,6 +6,11 @@ import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
 
 const BASE = "https://www.gumtree.com.au";
 
+/** Exposed for diagnostics (`/api/cron?diagnose=1`). */
+export function getGumtreeSearchUrl(): string {
+  return buildSearchUrl();
+}
+
 function buildSearchUrl(): string {
   const custom = process.env.GUMTREE_SEARCH_URL;
   if (custom?.trim()) return custom.trim();
@@ -168,6 +173,13 @@ export async function scrapeGumtree(): Promise<ScrapedListing[]> {
 
   if (map.size === 0) parseNextData(html, map);
   if (map.size === 0) parseHtml(html, map);
+
+  if (map.size === 0) {
+    const h = html.toLowerCase();
+    console.warn(
+      `[gumtree] 0 listings parsed. url=${url} htmlLength=${html.length} hasSAd=${html.includes("/s-ad/")} has__NEXT_DATA__=${html.includes("__NEXT_DATA__")} peakhour=${h.includes("peakhour")}`,
+    );
+  }
 
   return [...map.values()];
 }

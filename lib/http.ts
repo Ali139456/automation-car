@@ -15,7 +15,7 @@ function shouldRetryWithPlaywright(args: { status: number; html: string }): bool
  * Gumtree often serves a Peakhour / anti-bot script to plain `fetch`/axios (datacenters, servers).
  * Browsers get full HTML after JS. Match multiple markers so we fall back to Playwright when needed.
  */
-function looksLikeBotWallHtml(html: string): boolean {
+export function looksLikeBotWallHtml(html: string): boolean {
   const h = html.toLowerCase();
   return (
     h.includes("captcha-delivery.com") ||

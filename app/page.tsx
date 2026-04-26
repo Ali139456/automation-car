@@ -123,11 +123,13 @@ export default async function Home() {
           <h2 className={styles.sectionTitle}>Recent scans (scrape_runs)</h2>
           {recentRuns.length === 0 ? (
             <p className={styles.scanEmpty}>
-              No scan history yet. After you run{" "}
-              <code className={styles.infoCode}>002_scrape_runs.sql</code> in Supabase, each scan
-              will be logged here. In production, a scan also runs shortly after the server starts
-              (unless <code className={styles.infoCode}>SKIP_INITIAL_SCAN=true</code>), then on the
-              cron schedule.
+              No rows in <code className={styles.infoCode}>scrape_runs</code> yet — run{" "}
+              <code className={styles.infoCode}>002_scrape_runs.sql</code> in Supabase so each scan
+              is stored. If <code className={styles.infoCode}>/api/cron</code> returns{" "}
+              <code className={styles.infoCode}>examined: 0</code>, use{" "}
+              <code className={styles.infoCode}>/api/cron?secret=…&amp;diagnose=1</code> on Railway
+              to see whether Gumtree HTML actually contains listing links (Docker + Playwright
+              often required).
             </p>
           ) : (
             <div className={styles.scanTableWrap}>
