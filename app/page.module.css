@@ -132,6 +132,102 @@
   border-bottom-color: rgba(94, 234, 212, 0.55);
 }
 
+.infoBox {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: 1rem 1.15rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.infoBox p {
+  margin: 0;
+}
+
+.infoBox strong {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.infoCode {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  color: #e2e8f0;
+}
+
+.scanSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.scanEmpty {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.scanTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.scanTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.scanTable th,
+.scanTable td {
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.scanTable th {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.scanTable tr:last-child td {
+  border-bottom: none;
+}
+
+.scanMono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scanHighlight {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.scanNotes {
+  max-width: 20rem;
+  word-break: break-word;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
 .error {
   padding: 1.25rem 1.5rem;
   background: rgba(248, 113, 113, 0.08);

@@ -65,6 +65,13 @@ export async function fetchHtmlWithPlaywright(url: string): Promise<string> {
     if (postLoadWaitMs() > 0) {
       await delay(postLoadWaitMs());
     }
+    // Gumtree renders search results after JS; wait for a listing link when possible.
+    if (url.includes("gumtree.com.au")) {
+      const cap = Math.min(25_000, timeoutMs() + 10_000);
+      await page
+        .waitForSelector('a[href*="/s-ad/"]', { timeout: cap })
+        .catch(() => undefined);
+    }
     return await page.content();
   } finally {
     await context.close();

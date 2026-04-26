@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { logScrapeRun } from "@/lib/scrapeRunLog";
 import { processListings } from "@/services/processListings";
 import { scrapeGumtree } from "@/lib/scrapers/gumtree";
 import { scrapeCarsales } from "@/lib/scrapers/carsales";
@@ -35,6 +36,7 @@ async function safeScrapeListings(
 }
 
 async function runOnce(): Promise<RunReport> {
+  const t0 = Date.now();
   const doGumtree = process.env.SCRAPE_GUMTREE !== "false";
   const doCarsales = process.env.SCRAPE_CARSALES !== "false";
 
@@ -64,6 +66,17 @@ async function runOnce(): Promise<RunReport> {
     console.warn(`[car-monitor] carsales error: ${report.carsales.error}`);
   }
 
+  void logScrapeRun({
+    examined: report.process.examined,
+    newListings: report.process.newListings,
+    errors: report.process.errors,
+    gumtreeCount: report.gumtree.count,
+    carsalesCount: report.carsales.count,
+    gumtreeError: report.gumtree.error,
+    carsalesError: report.carsales.error,
+  });
+  console.log(`[car-monitor] scan finished in ${Date.now() - t0}ms`);
+
   return report;
 }
 
@@ -86,6 +99,14 @@ export function startScheduler(): void {
   });
 
   console.log(`[car-monitor] Scheduler started (${expr}).`);
+
+  if (process.env.SKIP_INITIAL_SCAN === "true") {
+    console.log("[car-monitor] SKIP_INITIAL_SCAN=true — no scan on boot.");
+  } else {
+    setImmediate(() => {
+      runOnce().catch((e) => console.error("[car-monitor] initial scan failed:", e));
+    });
+  }
 }
 
 export { runOnce };

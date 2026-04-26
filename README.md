@@ -2,12 +2,19 @@
 
 Next.js app that polls **Gumtree** and **Carsales** on a **3–5 minute** cadence (default **every 4 minutes**), stores seen listing IDs in **Supabase**, and sends **Telegram** alerts only for **new** listings.
 
+### How new rows get into the database
+
+1. A **scan** runs: on a schedule (in-process cron when using `next start`), **once shortly after server boot** (unless `SKIP_INITIAL_SCAN=true`), or when you call **`GET /api/cron?secret=…`**.  
+2. The scraper loads your **Gumtree** (and optionally **carsales**) search page, parses listing IDs.  
+3. For each ID, the app checks **`listings_seen`**. If that ID **does not exist**, it **inserts** the row and sends Telegram. If it already exists, it **skips** (no duplicate).  
+4. Each completed scan is appended to **`scrape_runs`** (run `002_scrape_runs.sql`) so the dashboard can show **recent scans** (examined / new / errors).
+
 ## Stack
 
 - Next.js (App Router, API routes), TypeScript  
 - Scraping: `axios` + `cheerio`  
 - Scheduler: `node-cron` (in-process when using `next start`)  
-- Database: Supabase (`listings_seen`)  
+- Database: Supabase (`listings_seen`, `scrape_runs`)  
 - Notifications: Telegram Bot API  
 
 ## Setup
@@ -15,7 +22,8 @@ Next.js app that polls **Gumtree** and **Carsales** on a **3–5 minute** cadenc
 ### 1. Supabase
 
 1. Create a project and run the SQL in `supabase/migrations/001_listings_seen.sql` (SQL Editor or CLI).  
-2. Copy **Project URL** and **anon** key; for server-side inserts with RLS, prefer **service role** and keep it only in server env (never expose in the browser).
+2. Run `supabase/migrations/002_scrape_runs.sql` so each scan is logged (dashboard “Recent scans”).  
+3. Copy **Project URL** and **anon** key; for server-side inserts with RLS, prefer **service role** and keep it only in server env (never expose in the browser).
 
 ### 2. Telegram
 
@@ -36,6 +44,7 @@ Copy `.env.example` to `.env.local` and fill in values.
 | `CRON_SECRET` | Shared secret for `GET /api/cron` |
 | `ENABLE_CRON` | `true` (default) to run in-process cron with `next start`; `false` if you only use HTTP cron |
 | `CRON_EXPRESSION` | Cron expression (default `*/4 * * * *`) |
+| `SKIP_INITIAL_SCAN` | Set `true` to skip the automatic scan on server boot (only scheduled / manual cron) |
 | `GUMTREE_SEARCH_URL` / `CARSALES_SEARCH_URL` | Optional full search URLs if defaults break |
 
 ### 4. Run locally

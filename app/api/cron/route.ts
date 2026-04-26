@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, report });
   } catch (e) {
     console.error("[api/cron]", e);
-    return NextResponse.json({ error: "Scan failed" }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: "Scan failed", message }, { status: 500 });
   }
 }

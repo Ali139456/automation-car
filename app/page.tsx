@@ -1,4 +1,5 @@
 import { getMonitorSearchContext } from "@/lib/searchDisplay";
+import { getRecentScrapeRuns } from "@/lib/scrapeRunLog";
 import { getRecentListings, type ListingRow } from "@/lib/supabase";
 import { getListingSource } from "@/lib/listingSource";
 import styles from "./page.module.css";
@@ -41,6 +42,7 @@ export default async function Home() {
   }
 
   const searchCtx = getMonitorSearchContext();
+  const recentRuns = await getRecentScrapeRuns(8);
 
   return (
     <div className={styles.shell}>
@@ -96,6 +98,71 @@ export default async function Home() {
           </a>
         ) : null}
       </section>
+
+      <div className={styles.infoBox} role="note">
+        <p>
+          <strong>Why do buttons open Gumtree?</strong> This app only stores title, price, and
+          the <em>link</em> to each ad. The real photos and description stay on Gumtree (or
+          carsales) — that is on purpose, not a bug. &quot;Open listing&quot; always goes to
+          the URL saved in the database (your test row used the Gumtree <em>homepage</em>, so
+          it opens the homepage; real scraper rows use a <code className={styles.infoCode}>/s-ad/…</code>{" "}
+          link for that car).
+        </p>
+        <p>
+          <strong>How new rows are added:</strong> the server loads Gumtree (and optionally carsales),
+          then for each ad ID checks Supabase. <strong>Only IDs that are not already in</strong>{" "}
+          <code className={styles.infoCode}>listings_seen</code> get <strong>inserted</strong> and (if
+          configured) a Telegram message. The table below shows each completed scan. Use Docker on
+          Railway for Playwright; trigger manually:{" "}
+          <code className={styles.infoCode}>/api/cron?secret=…</code>
+        </p>
+      </div>
+
+      {!errorMessage && (
+        <section className={styles.scanSection} aria-label="Recent scraper runs">
+          <h2 className={styles.sectionTitle}>Recent scans (scrape_runs)</h2>
+          {recentRuns.length === 0 ? (
+            <p className={styles.scanEmpty}>
+              No scan history yet. After you run{" "}
+              <code className={styles.infoCode}>002_scrape_runs.sql</code> in Supabase, each scan
+              will be logged here. In production, a scan also runs shortly after the server starts
+              (unless <code className={styles.infoCode}>SKIP_INITIAL_SCAN=true</code>), then on the
+              cron schedule.
+            </p>
+          ) : (
+            <div className={styles.scanTableWrap}>
+              <table className={styles.scanTable}>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Examined</th>
+                    <th>New in DB</th>
+                    <th>Gumtree</th>
+                    <th>DB errors</th>
+                    <th>Scrape notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRuns.map((r) => (
+                    <tr key={r.id}>
+                      <td className={styles.scanMono}>{formatWhen(r.run_at)}</td>
+                      <td>{r.examined}</td>
+                      <td className={r.new_listings > 0 ? styles.scanHighlight : undefined}>
+                        {r.new_listings}
+                      </td>
+                      <td>{r.gumtree_count}</td>
+                      <td>{r.errors}</td>
+                      <td className={styles.scanNotes}>
+                        {[r.gumtree_error, r.carsales_error].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {errorMessage && (
         <div
@@ -168,6 +235,7 @@ export default async function Home() {
                       href={row.link}
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="Opens the original ad on the listing site (external)"
                     >
                       Open listing
                       <span className={styles.linkArrow} aria-hidden>
