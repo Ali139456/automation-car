@@ -1,6 +1,14 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { ScrapedListing } from "@/lib/listing";
 
+export type ListingRow = {
+  id: string;
+  title: string;
+  price: string;
+  link: string;
+  created_at: string;
+};
+
 function getServerSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey =
@@ -46,4 +54,16 @@ export async function saveListing(listing: ScrapedListing): Promise<void> {
   });
 
   if (error) throw error;
+}
+
+export async function getRecentListings(limit = 200): Promise<ListingRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("listings_seen")
+    .select("id, title, price, link, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data as ListingRow[]) ?? [];
 }

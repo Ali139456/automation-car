@@ -10,8 +10,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: appDir,
   },
-  // Playwright is a large native dependency; keep it external to the Next bundle.
-  serverExternalPackages: ["playwright"],
+  // Native/heavy deps: keep external so the runtime loads real node_modules (avoids
+  // Turbopack hashed externals like `node-cron-*` that break instrumentation).
+  serverExternalPackages: ["playwright", "node-cron"],
 };
 
 export default nextConfig;
