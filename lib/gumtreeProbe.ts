@@ -1,5 +1,6 @@
 import { fetchHtml, looksLikeBotWallHtml, gumtreeHtmlMissingSearchResults } from "@/lib/http";
 import { getGumtreeSearchUrl } from "@/lib/scrapers/gumtree";
+import { isPlaywrightCdpConfigured } from "@/lib/playwrightCdp";
 
 /**
  * One-off fetch of the configured Gumtree search page for debugging when `examined: 0`.
@@ -13,6 +14,7 @@ export async function probeGumtreeSearchPage(): Promise<{
   looksLikeBotWall: boolean;
   gumtreeIncompleteShell: boolean;
   usePlaywright: boolean;
+  playwrightCdp: boolean;
   error?: string;
 }> {
   const url = getGumtreeSearchUrl();
@@ -29,6 +31,7 @@ export async function probeGumtreeSearchPage(): Promise<{
       looksLikeBotWall: looksLikeBotWallHtml(html),
       gumtreeIncompleteShell: gumtreeHtmlMissingSearchResults(html),
       usePlaywright,
+      playwrightCdp: isPlaywrightCdpConfigured(),
     };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
@@ -41,6 +44,7 @@ export async function probeGumtreeSearchPage(): Promise<{
       looksLikeBotWall: false,
       gumtreeIncompleteShell: true,
       usePlaywright,
+      playwrightCdp: isPlaywrightCdpConfigured(),
       error,
     };
   }

@@ -46,6 +46,8 @@ Copy `.env.example` to `.env.local` and fill in values.
 | `CRON_EXPRESSION` | Cron expression (default `*/4 * * * *`) |
 | `SKIP_INITIAL_SCAN` | Set `true` to skip the automatic scan on server boot (only scheduled / manual cron) |
 | `GUMTREE_SEARCH_URL` / `CARSALES_SEARCH_URL` | Optional full search URLs if defaults break |
+| `PLAYWRIGHT_CDP_URL` | e.g. `http://127.0.0.1:9222` — attach to **real Chrome** (`npm run chrome:cdp`) when Gumtree blocks Playwright’s Chromium |
+| `GUMTREE_HTTP_FIRST` | Set `true` only to debug: try `axios` before Playwright for Gumtree (default is Playwright first) |
 | `SCRAPE_HTTPS_PROXY` (or `HTTPS_PROXY`) | HTTP proxy `http://user:pass@host:port` when Gumtree blocks VPN/datacenter IPs; `SCRAPE_HTTPS_PROXY` wins |
 
 ### 4. Run locally
@@ -72,6 +74,14 @@ npm run playwright:install
 - `PLAYWRIGHT_TIMEOUT_MS=60000`
 
 3. Restart `npm run dev` and hit `/api/cron` again.
+
+#### Normal Chrome works but the scraper gets Access denied?
+
+Your **real Chrome** and **Playwright’s Chromium / axios** send different fingerprints. Gumtree may allow Chrome and block automation on the **same PC**.
+
+1. Gumtree requests use **Playwright before axios** by default (`GUMTREE_HTTP_FIRST=true` only for debugging).
+2. Attach to **your** Chrome (**CDP**): run **`npm run chrome:cdp`**, then add **`PLAYWRIGHT_CDP_URL=http://127.0.0.1:9222`** to `.env.local`, leave Chrome running, restart `npm run dev`, call `/api/cron` again.
+3. If **Chrome** also shows Access denied, fix **network/IP** (no VPN, hotspot, `SCRAPE_HTTPS_PROXY`).
 
 Note: if a site updates protections further, you may still need a **residential proxy** / manual cookies — but Playwright is the most practical “easy + reliable” self-hosted first step.
 

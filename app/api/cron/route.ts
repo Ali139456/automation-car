@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { probeGumtreeSearchPage } from "@/lib/gumtreeProbe";
 import { runOnce } from "@/jobs/scheduler";
+import { isPlaywrightCdpConfigured } from "@/lib/playwrightCdp";
 
 /**
  * Trigger a scan manually or from Railway Cron / external scheduler.
@@ -30,9 +31,10 @@ export async function GET(request: Request) {
         scrapeProxy: Boolean(
           process.env.SCRAPE_HTTPS_PROXY?.trim() || process.env.HTTPS_PROXY?.trim(),
         ),
+        playwrightCdp: isPlaywrightCdpConfigured(),
       },
       help:
-        "If hasListingLinks is false, check gumtreeIncompleteShell and looksLikeBotWall. Full browser Access denied on a VPN IP is an IP block: use home/mobile IP, another VPN city, or SCRAPE_HTTPS_PROXY (residential HTTP proxy). Also USE_PLAYWRIGHT=true, Dockerfile on Railway, optional GUMTREE_PLAYWRIGHT_FIRST=true.",
+        "If normal Chrome shows listings but the app does not: set PLAYWRIGHT_CDP_URL (run npm run chrome:cdp first). Gumtree uses Playwright-first by default (not axios). If Chrome also shows Access denied, change IP (hotspot/residential proxy).",
     });
   }
 

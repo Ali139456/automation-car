@@ -1,10 +1,13 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { getScrapeProxy } from "@/lib/scrapeProxy";
+import { getPlaywrightCdpUrl } from "@/lib/playwrightCdp";
 
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 let browserPromise: Promise<Browser> | null = null;
+/** Set when connecting so each fetch can match real-browser vs bundled Chromium behaviour. */
+let browserConnectionKind: "launch" | "cdp" | null = null;
 
 /** One Gumtree navigation at a time (shared Browser; concurrent contexts still race the process on some WAFs). */
 let playwrightTail: Promise<unknown> = Promise.resolve();
@@ -42,19 +45,28 @@ async function resetBrowser(): Promise<void> {
   const b = await browserPromise.catch(() => null);
   await b?.close().catch(() => undefined);
   browserPromise = null;
+  browserConnectionKind = null;
 }
 
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = chromium.launch({
-      headless: headless(),
-      channel: launchChannel(),
-      args: [
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-blink-features=AutomationControlled",
-      ],
-    });
+    const cdp = getPlaywrightCdpUrl();
+    if (cdp) {
+      console.info(`[playwrightHtml] Connecting to Chrome/Edge via CDP: ${cdp}`);
+      browserConnectionKind = "cdp";
+      browserPromise = chromium.connectOverCDP(cdp);
+    } else {
+      browserConnectionKind = "launch";
+      browserPromise = chromium.launch({
+        headless: headless(),
+        channel: launchChannel(),
+        args: [
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-blink-features=AutomationControlled",
+        ],
+      });
+    }
   }
   return browserPromise;
 }
@@ -111,10 +123,11 @@ async function gotoWithFallbacks(page: Page, url: string, gumtree: boolean): Pro
 async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
   const browser = await getBrowser();
   const gumtree = url.includes("gumtree.com.au");
+  const viaCdp = browserConnectionKind === "cdp";
   const proxyConfig = getScrapeProxy()?.playwright;
 
   const context = await browser.newContext({
-    userAgent: CHROME_UA,
+    ...(viaCdp ? {} : { userAgent: CHROME_UA }),
     locale: "en-AU",
     timezoneId: "Australia/Sydney",
     viewport: { width: 1365, height: 900 },
@@ -130,11 +143,12 @@ async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
   });
 
   const page = await context.newPage();
-  let html = "";
   try {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-    });
+    if (!viaCdp) {
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      });
+    }
 
     await gotoWithFallbacks(page, url, gumtree);
 
@@ -143,12 +157,11 @@ async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
     }
 
     if (gumtree) {
-      // Soft wait for listing grid; avoid networkidle (bots + long-poll break it and can destabilize navigation).
       const cap = Math.min(45_000, Math.max(20_000, timeoutMs()));
       await page.waitForSelector('a[href*="/s-ad/"], [data-testid="srp-results"]', { timeout: cap }).catch(() => undefined);
     }
 
-    html = await page.content();
+    const html = await page.content();
     if (html.length < 500) {
       console.warn(
         `[playwrightHtml] Short HTML (${html.length} chars). First 400 chars: ${html.slice(0, 400).replace(/\s+/g, " ")}`,
@@ -193,6 +206,7 @@ process.on("SIGINT", async () => {
     await b?.close().catch(() => undefined);
   }
   browserPromise = null;
+  browserConnectionKind = null;
 });
 process.on("SIGTERM", async () => {
   if (browserPromise) {
@@ -200,4 +214,5 @@ process.on("SIGTERM", async () => {
     await b?.close().catch(() => undefined);
   }
   browserPromise = null;
+  browserConnectionKind = null;
 });

@@ -10,7 +10,10 @@ function isGumtreeUrl(url: string): boolean {
 }
 
 function gumtreePreferPlaywrightFirst(): boolean {
-  return process.env.GUMTREE_PLAYWRIGHT_FIRST === "true";
+  if (process.env.USE_PLAYWRIGHT === "false") return false;
+  if (process.env.GUMTREE_HTTP_FIRST === "true") return false;
+  if (process.env.GUMTREE_PLAYWRIGHT_FIRST === "false") return false;
+  return true;
 }
 
 function shouldRetryWithPlaywright(args: {
@@ -75,7 +78,7 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
     const html = await fetchHtmlWithPlaywright(url);
     if (looksLikeBotWallHtml(html)) {
       throw new Error(
-        `Gumtree returned bot/captcha HTML with GUMTREE_PLAYWRIGHT_FIRST. Try another network or non-headless Playwright.`,
+        `Gumtree blocked HTML (bot wall / Access denied). Use real Chrome: PLAYWRIGHT_CDP_URL=http://127.0.0.1:9222 and run scripts/start-chrome-cdp.ps1, or change network. Set GUMTREE_HTTP_FIRST=true only to debug axios.`,
       );
     }
     return html;
@@ -116,7 +119,7 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
       const html2 = await fetchHtmlWithPlaywright(url);
       if (looksLikeBotWallHtml(html2)) {
         throw new Error(
-          `Still seeing bot/captcha interstitial after Playwright for ${url}. You may need a different network (residential IP/VPN) or a manual session approach.`,
+          `Gumtree blocked after Playwright (Access denied / bot page). Fix: PLAYWRIGHT_CDP_URL with your Chrome (scripts/start-chrome-cdp.ps1), or residential IP / SCRAPE_HTTPS_PROXY.`,
         );
       }
       if (isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(html2)) {
@@ -139,7 +142,7 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
         const html2 = await fetchHtmlWithPlaywright(url);
         if (looksLikeBotWallHtml(html2)) {
           throw new Error(
-            `Still seeing bot/captcha interstitial after Playwright for ${url}. You may need a different network (residential IP/VPN) or a manual session approach.`,
+            `Gumtree blocked after Playwright (Access denied / bot page). Fix: PLAYWRIGHT_CDP_URL with your Chrome (scripts/start-chrome-cdp.ps1), or residential IP / SCRAPE_HTTPS_PROXY.`,
           );
         }
         if (isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(html2)) {

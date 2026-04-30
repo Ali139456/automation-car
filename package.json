@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "playwright:install": "playwright install chromium"
+    "playwright:install": "playwright install chromium",
+    "chrome:cdp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-chrome-cdp.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
