@@ -27,9 +27,12 @@ export async function GET(request: Request) {
         scrapeGumtree: process.env.SCRAPE_GUMTREE !== "false",
         usePlaywright: process.env.USE_PLAYWRIGHT !== "false",
         hasCustomGumtreeUrl: Boolean(process.env.GUMTREE_SEARCH_URL?.trim()),
+        scrapeProxy: Boolean(
+          process.env.SCRAPE_HTTPS_PROXY?.trim() || process.env.HTTPS_PROXY?.trim(),
+        ),
       },
       help:
-        "If hasListingLinks is false and htmlLength is small, Gumtree is likely not returning real search HTML (bot wall or wrong page). Use Docker on Railway, keep USE_PLAYWRIGHT=true, and check logs.",
+        "If hasListingLinks is false, check gumtreeIncompleteShell and looksLikeBotWall. Full browser Access denied on a VPN IP is an IP block: use home/mobile IP, another VPN city, or SCRAPE_HTTPS_PROXY (residential HTTP proxy). Also USE_PLAYWRIGHT=true, Dockerfile on Railway, optional GUMTREE_PLAYWRIGHT_FIRST=true.",
     });
   }
 

@@ -87,7 +87,7 @@ export function getMonitorSearchContext(): MonitorSearchContext {
     if (filterChips.length === 0) {
       filterChips = [`Custom search (${truncateMiddle(gumtreeUrl)})`];
     }
-    sectionTitle = "Active search (matches GUMTREE_SEARCH_URL)";
+    sectionTitle = "Your search";
   } else {
     const f = defaultSearchFilters;
     filterChips = [
@@ -96,40 +96,25 @@ export function getMonitorSearchContext(): MonitorSearchContext {
       f.transmission.charAt(0).toUpperCase() + f.transmission.slice(1),
       f.condition.charAt(0).toUpperCase() + f.condition.slice(1),
     ];
-    sectionTitle = "Active search (default Gumtree URL in code)";
+    sectionTitle = "Search filters";
   }
 
   const scrapeGt = process.env.SCRAPE_GUMTREE !== "false";
   const scrapeCs = process.env.SCRAPE_CARSALES !== "false";
-  const pw = process.env.USE_PLAYWRIGHT !== "false";
 
   const parts: string[] = [];
   if (scrapeGt) parts.push("Gumtree");
   if (scrapeCs) parts.push("carsales");
   const tagline =
     parts.length > 0
-      ? `Tracked used listings · ${parts.join(" & ")}`
-      : "No sources enabled — set SCRAPE_GUMTREE / SCRAPE_CARSALES";
-
-  const hintBits: string[] = [];
-  if (!scrapeGt) {
-    hintBits.push("Gumtree scraping is off (SCRAPE_GUMTREE=false).");
-  }
-  if (!scrapeCs && scrapeGt) {
-    hintBits.push("carsales is off.");
-  }
-  if (scrapeGt && pw) {
-    hintBits.push("Playwright will run if Gumtree blocks simple HTTP.");
-  }
-  if (scrapeGt && !pw) {
-    hintBits.push("USE_PLAYWRIGHT=false — bot pages may return 0 listings.");
-  }
+      ? `Watching ${parts.join(" and ")} for new listings`
+      : "Not watching any sites yet";
 
   return {
     sectionTitle,
     filterChips,
     tagline,
     gumtreeSearchUrl: gumtreeUrl,
-    emptyHint: hintBits.length ? hintBits.join(" ") : null,
+    emptyHint: null,
   };
 }

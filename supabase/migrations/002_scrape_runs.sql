@@ -1,4 +1,7 @@
 -- Run in Supabase SQL Editor (after 001_listings_seen.sql). Logs each scan so the UI can show last run.
+--
+-- Safe to run this whole file multiple times: `IF NOT EXISTS` avoids errors.
+-- After the table exists, the *app* inserts one row per completed scan (not duplicate bugs).
 
 create table if not exists public.scrape_runs (
   id uuid primary key default gen_random_uuid(),

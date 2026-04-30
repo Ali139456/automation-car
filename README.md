@@ -46,6 +46,7 @@ Copy `.env.example` to `.env.local` and fill in values.
 | `CRON_EXPRESSION` | Cron expression (default `*/4 * * * *`) |
 | `SKIP_INITIAL_SCAN` | Set `true` to skip the automatic scan on server boot (only scheduled / manual cron) |
 | `GUMTREE_SEARCH_URL` / `CARSALES_SEARCH_URL` | Optional full search URLs if defaults break |
+| `SCRAPE_HTTPS_PROXY` (or `HTTPS_PROXY`) | HTTP proxy `http://user:pass@host:port` when Gumtree blocks VPN/datacenter IPs; `SCRAPE_HTTPS_PROXY` wins |
 
 ### 4. Run locally
 
@@ -74,7 +75,8 @@ npm run playwright:install
 
 Note: if a site updates protections further, you may still need a **residential proxy** / manual cookies — but Playwright is the most practical “easy + reliable” self-hosted first step.
 
-Cron **does not** run in `next dev` the same way as production; use `/api/cron` with `CRON_SECRET` to trigger a scan while developing, or run `npm run build && npm run start`.
+If Gumtree shows **Access denied** in your normal browser too, Gumtree is blocking **that exit IP** (shared VPN ranges are common). Change network: **home broadband**, **mobile hotspot**, another **VPN city**, Nord **dedicated IP** (sometimes better than shared pools), or set **`SCRAPE_HTTPS_PROXY`** to an HTTP proxy with a residential exit you’re allowed to use. Check Gumtree’s terms for automated access.
+
 
 ### 5. Railway
 

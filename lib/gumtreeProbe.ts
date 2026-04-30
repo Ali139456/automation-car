@@ -1,4 +1,4 @@
-import { fetchHtml, looksLikeBotWallHtml } from "@/lib/http";
+import { fetchHtml, looksLikeBotWallHtml, gumtreeHtmlMissingSearchResults } from "@/lib/http";
 import { getGumtreeSearchUrl } from "@/lib/scrapers/gumtree";
 
 /**
@@ -11,6 +11,7 @@ export async function probeGumtreeSearchPage(): Promise<{
   hasNextData: boolean;
   hasJsonLdItemList: boolean;
   looksLikeBotWall: boolean;
+  gumtreeIncompleteShell: boolean;
   usePlaywright: boolean;
   error?: string;
 }> {
@@ -26,6 +27,7 @@ export async function probeGumtreeSearchPage(): Promise<{
       hasNextData: html.includes("__NEXT_DATA__"),
       hasJsonLdItemList: h.includes("itemlist") && h.includes("application/ld+json"),
       looksLikeBotWall: looksLikeBotWallHtml(html),
+      gumtreeIncompleteShell: gumtreeHtmlMissingSearchResults(html),
       usePlaywright,
     };
   } catch (e) {
@@ -37,6 +39,7 @@ export async function probeGumtreeSearchPage(): Promise<{
       hasNextData: false,
       hasJsonLdItemList: false,
       looksLikeBotWall: false,
+      gumtreeIncompleteShell: true,
       usePlaywright,
       error,
     };

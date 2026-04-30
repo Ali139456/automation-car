@@ -10,6 +10,9 @@ const DEFAULT_CRON = "*/4 * * * *"; /** every 4 minutes (within 3–5 min window
 
 let started = false;
 
+/** Cron + boot scan + HTTP cron must not overlap or Playwright shares one browser and fights itself. */
+let runOnceTail: Promise<unknown> = Promise.resolve();
+
 export type RunReport = {
   gumtree: { count: number; error?: string };
   carsales: { count: number; error?: string };
@@ -35,7 +38,7 @@ async function safeScrapeListings(
   }
 }
 
-async function runOnce(): Promise<RunReport> {
+async function runOnceBody(): Promise<RunReport> {
   const t0 = Date.now();
   const doGumtree = process.env.SCRAPE_GUMTREE !== "false";
   const doCarsales = process.env.SCRAPE_CARSALES !== "false";
@@ -80,6 +83,15 @@ async function runOnce(): Promise<RunReport> {
   return report;
 }
 
+export async function runOnce(): Promise<RunReport> {
+  const scheduled = runOnceTail.then(() => runOnceBody());
+  runOnceTail = scheduled.then(
+    () => undefined,
+    () => undefined,
+  );
+  return scheduled as Promise<RunReport>;
+}
+
 /**
  * Schedules recurring scrapes when the Node server is running (e.g. Railway `next start`).
  * Set ENABLE_CRON=false to disable (e.g. when using HTTP cron only).
@@ -108,5 +120,3 @@ export function startScheduler(): void {
     });
   }
 }
-
-export { runOnce };

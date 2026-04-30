@@ -94,42 +94,17 @@ export default async function Home() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Open this search on Gumtree (same URL as the scraper) ↗
+            View on Gumtree ↗
           </a>
         ) : null}
       </section>
 
-      <div className={styles.infoBox} role="note">
-        <p>
-          <strong>Why do buttons open Gumtree?</strong> This app only stores title, price, and
-          the <em>link</em> to each ad. The real photos and description stay on Gumtree (or
-          carsales) — that is on purpose, not a bug. &quot;Open listing&quot; always goes to
-          the URL saved in the database (your test row used the Gumtree <em>homepage</em>, so
-          it opens the homepage; real scraper rows use a <code className={styles.infoCode}>/s-ad/…</code>{" "}
-          link for that car).
-        </p>
-        <p>
-          <strong>How new rows are added:</strong> the server loads Gumtree (and optionally carsales),
-          then for each ad ID checks Supabase. <strong>Only IDs that are not already in</strong>{" "}
-          <code className={styles.infoCode}>listings_seen</code> get <strong>inserted</strong> and (if
-          configured) a Telegram message. The table below shows each completed scan. Use Docker on
-          Railway for Playwright; trigger manually:{" "}
-          <code className={styles.infoCode}>/api/cron?secret=…</code>
-        </p>
-      </div>
-
       {!errorMessage && (
-        <section className={styles.scanSection} aria-label="Recent scraper runs">
-          <h2 className={styles.sectionTitle}>Recent scans (scrape_runs)</h2>
+        <section className={styles.scanSection} aria-label="Recent activity">
+          <h2 className={styles.sectionTitle}>Recent activity</h2>
           {recentRuns.length === 0 ? (
             <p className={styles.scanEmpty}>
-              No rows in <code className={styles.infoCode}>scrape_runs</code> yet — run{" "}
-              <code className={styles.infoCode}>002_scrape_runs.sql</code> in Supabase so each scan
-              is stored. If <code className={styles.infoCode}>/api/cron</code> returns{" "}
-              <code className={styles.infoCode}>examined: 0</code>, use{" "}
-              <code className={styles.infoCode}>/api/cron?secret=…&amp;diagnose=1</code> on Railway
-              to see whether Gumtree HTML actually contains listing links (Docker + Playwright
-              often required).
+              No runs recorded yet. Check history will show here after the watch has run.
             </p>
           ) : (
             <div className={styles.scanTableWrap}>
@@ -137,11 +112,11 @@ export default async function Home() {
                 <thead>
                   <tr>
                     <th>Time</th>
-                    <th>Examined</th>
-                    <th>New in DB</th>
+                    <th>Checked</th>
+                    <th>New</th>
                     <th>Gumtree</th>
-                    <th>DB errors</th>
-                    <th>Scrape notes</th>
+                    <th>Errors</th>
+                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -175,17 +150,12 @@ export default async function Home() {
           <p>{errorMessage}</p>
           {configHint && (
             <p className={styles.errorHint}>
-              Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and a Supabase key in{" "}
-              <code>.env.local</code>, then restart the dev server.
+              Connect the app to your database in the environment settings, then try again.
             </p>
           )}
           {!configHint && (
             <p className={styles.errorHint}>
-              Common fixes: run <code>001_listings_seen.sql</code> in Supabase SQL; keep{" "}
-              <code>SUPABASE_SERVICE_ROLE_KEY</code> in <code>.env.local</code> (or add a
-              read policy for <code>anon</code>); restart <code>npm run dev</code> after
-              env changes. Listings only appear after the scraper has saved at least one
-              row (cron or <code>/api/cron</code>).
+              If this persists, check that the database is set up and the app can reach it.
             </p>
           )}
         </div>
@@ -195,14 +165,9 @@ export default async function Home() {
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>No listings yet</p>
           <p className={styles.emptyText}>
-            New ads that pass your filters and are not already in the database will show
-            here after a successful scan. Trigger a scan with your Railway URL or local{" "}
-            <code className={styles.emptyCode}>/api/cron?secret=…</code> (in-process
-            timer runs when you use <code className={styles.emptyCode}>next start</code>).
+            New cars that match your search will appear here after they are found. Open a
+            listing to see the full ad on the original site.
           </p>
-          {searchCtx.emptyHint ? (
-            <p className={styles.emptyHint}>{searchCtx.emptyHint}</p>
-          ) : null}
         </div>
       )}
 
@@ -237,7 +202,7 @@ export default async function Home() {
                       href={row.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Opens the original ad on the listing site (external)"
+                      title="Open on listing site"
                     >
                       Open listing
                       <span className={styles.linkArrow} aria-hidden>
@@ -253,7 +218,7 @@ export default async function Home() {
       )}
 
       <footer className={styles.footer}>
-        <p>Car Monitor · Refreshes with each page load</p>
+        <p>Car Monitor</p>
       </footer>
     </div>
   );

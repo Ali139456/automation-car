@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Car Monitor | Tracked listings",
-  description:
-    "View car listings discovered by Gumtree and carsales scrapers, stored in Supabase.",
+  title: "Car Monitor",
+  description: "Watch Gumtree and carsales for new listings that match your search.",
 };
 
 export default function RootLayout({
