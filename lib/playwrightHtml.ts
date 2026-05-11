@@ -12,7 +12,7 @@ let browserConnectionKind: "launch" | "cdp" | null = null;
 /** One Gumtree navigation at a time (shared Browser; concurrent contexts still race the process on some WAFs). */
 let playwrightTail: Promise<unknown> = Promise.resolve();
 
-function usePlaywright(): boolean {
+function playwrightFeatureEnabled(): boolean {
   return process.env.USE_PLAYWRIGHT !== "false";
 }
 
@@ -178,7 +178,7 @@ async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
  * to plain HTTP clients.
  */
 export async function fetchHtmlWithPlaywright(url: string): Promise<string> {
-  if (!usePlaywright()) {
+  if (!playwrightFeatureEnabled()) {
     throw new Error("USE_PLAYWRIGHT=false (Playwright disabled)");
   }
 

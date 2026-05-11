@@ -77,3 +77,62 @@ export async function getRecentScrapeRuns(limit = 5): Promise<ScrapeRunRow[]> {
     return [];
   }
 }
+
+export type ScrapeRunsPageResult = {
+  rows: ScrapeRunRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * Paginated scrape history (newest first). Returns empty totals if table is missing.
+ */
+export async function getScrapeRunsPage(
+  page: number,
+  pageSize: number,
+): Promise<ScrapeRunsPageResult> {
+  try {
+    const supabase = getSupabase();
+    const { count: totalCount, error: countErr } = await supabase
+      .from("scrape_runs")
+      .select("*", { count: "exact", head: true });
+    if (countErr) {
+      if (String(countErr.message ?? "").toLowerCase().includes("scrape_runs")) {
+        return { rows: [], total: 0, page: 1, pageSize };
+      }
+      throw countErr;
+    }
+
+    const total = totalCount ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const from = (safePage - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from("scrape_runs")
+      .select(
+        "id, run_at, examined, new_listings, errors, gumtree_count, carsales_count, gumtree_error, carsales_error",
+      )
+      .order("run_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      if (String(error.message ?? "").toLowerCase().includes("scrape_runs")) {
+        return { rows: [], total: 0, page: 1, pageSize };
+      }
+      throw error;
+    }
+
+    return {
+      rows: (data as ScrapeRunRow[]) ?? [],
+      total,
+      page: safePage,
+      pageSize,
+    };
+  } catch (e) {
+    console.error("[scrape_runs] getScrapeRunsPage:", e);
+    return { rows: [], total: 0, page: 1, pageSize };
+  }
+}

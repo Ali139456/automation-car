@@ -3,6 +3,7 @@ import type { ScrapedListing } from "@/lib/listing";
 import { defaultSearchFilters } from "@/lib/listing";
 import { fetchHtml } from "@/lib/http";
 import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
+import { titleFromGumtreeLink } from "@/lib/listingDisplayTitle";
 
 const BASE = "https://www.gumtree.com.au";
 
@@ -27,9 +28,27 @@ function buildSearchUrl(): string {
   return `${BASE}/s-cars-vans-utes/c18320?${params.join("&")}`;
 }
 
-function pushUnique(map: Map<string, ScrapedListing>, listing: ScrapedListing | null) {
+function listingQualityScore(l: ScrapedListing): number {
+  let s = 0;
+  const title = l.title?.trim().toLowerCase() ?? "";
+  if (title && title !== "unknown") s += 3;
+  const price = l.price?.trim() ?? "";
+  if (price && price !== "—" && !/^n\/a$/i.test(price)) s += 2;
+  if (l.link?.includes("/s-ad/")) s += 1;
+  return s;
+}
+
+/** Prefer richer rows (HTML parse) over weak JSON-LD placeholders with same id. */
+function mergeListing(map: Map<string, ScrapedListing>, listing: ScrapedListing | null) {
   if (!listing?.id) return;
-  if (!map.has(listing.id)) map.set(listing.id, listing);
+  const existing = map.get(listing.id);
+  if (!existing) {
+    map.set(listing.id, listing);
+    return;
+  }
+  if (listingQualityScore(listing) > listingQualityScore(existing)) {
+    map.set(listing.id, listing);
+  }
 }
 
 function extractIdFromUrl(url: string): string | null {
@@ -59,7 +78,7 @@ function parseJsonLdItem(
     urlRaw.startsWith("http") ? urlRaw : urlRaw ? `${BASE}${urlRaw}` : BASE;
   const title = String(product.name ?? "Unknown");
 
-  pushUnique(map, {
+  mergeListing(map, {
     id,
     title,
     price: formatPriceDisplay(n, typeof priceRaw === "string" ? priceRaw : undefined),
@@ -118,7 +137,7 @@ function parseNextData(html: string, map: Map<string, ScrapedListing>) {
       );
       const urlPath = String(ad.url ?? ad.adUrl ?? "");
       const link = urlPath.startsWith("http") ? urlPath : `${BASE}${urlPath}`;
-      pushUnique(map, {
+      mergeListing(map, {
         id,
         title,
         price: formatPriceDisplay(
@@ -151,7 +170,7 @@ function parseHtml(html: string, map: Map<string, ScrapedListing>) {
     const n = parsePriceToNumber(priceTxt);
     const link = href.startsWith("http") ? href : `${BASE}${href}`;
 
-    pushUnique(map, {
+    mergeListing(map, {
       id,
       title: title || "Unknown",
       price: formatPriceDisplay(n, priceTxt || undefined),
@@ -170,9 +189,18 @@ export async function scrapeGumtree(): Promise<ScrapedListing[]> {
 
   const $ = cheerio.load(html);
   parseJsonLd($, map);
+  // Always run HTML/__NEXT_DATA__ too: JSON-LD can insert same ids with title "Unknown" and
+  // previously blocked richer SERP parsing when map was already non-empty.
+  parseNextData(html, map);
+  parseHtml(html, map);
 
-  if (map.size === 0) parseNextData(html, map);
-  if (map.size === 0) parseHtml(html, map);
+  for (const [id, listing] of map) {
+    const t = listing.title?.trim().toLowerCase() ?? "";
+    if (t === "unknown" || !listing.title?.trim()) {
+      const hint = titleFromGumtreeLink(listing.link);
+      if (hint) map.set(id, { ...listing, title: hint });
+    }
+  }
 
   if (map.size === 0) {
     const h = html.toLowerCase();

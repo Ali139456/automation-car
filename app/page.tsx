@@ -1,10 +1,34 @@
 import { getMonitorSearchContext } from "@/lib/searchDisplay";
-import { getRecentScrapeRuns } from "@/lib/scrapeRunLog";
-import { getRecentListings, type ListingRow } from "@/lib/supabase";
+import { getScrapeRunsPage } from "@/lib/scrapeRunLog";
+import { getListingsPage, type ListingRow } from "@/lib/supabase";
 import { getListingSource } from "@/lib/listingSource";
+import { formatListingTitle } from "@/lib/listingDisplayTitle";
+import { PagePagination } from "./PagePagination";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
+
+const LISTINGS_PAGE_SIZE = 12;
+const RUNS_PAGE_SIZE = 8;
+
+function firstQueryValue(v: string | string[] | undefined): string | undefined {
+  if (Array.isArray(v)) return v[0];
+  return v;
+}
+
+function parsePositiveInt(v: string | undefined, fallback: number): number {
+  const n = parseInt(v ?? "", 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return n;
+}
+
+function homeHref(listingsPage: number, runsPage: number): string {
+  const p = new URLSearchParams();
+  if (listingsPage > 1) p.set("listingsPage", String(listingsPage));
+  if (runsPage > 1) p.set("runsPage", String(runsPage));
+  const qs = p.toString();
+  return qs ? `/?${qs}` : "/";
+}
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -29,20 +53,41 @@ function formatLoadError(e: unknown): string {
   return "Could not load listings.";
 }
 
-export default async function Home() {
+type HomeProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const sp = (await searchParams) ?? {};
+  const rawListingsPage = parsePositiveInt(firstQueryValue(sp.listingsPage), 1);
+  const rawRunsPage = parsePositiveInt(firstQueryValue(sp.runsPage), 1);
+
   let listings: ListingRow[] = [];
+  let listingsTotal = 0;
+  let listingsPage = 1;
+  let listingsTotalPages = 1;
   let errorMessage: string | null = null;
   let configHint = false;
 
   try {
-    listings = await getRecentListings();
+    const pageResult = await getListingsPage(rawListingsPage, LISTINGS_PAGE_SIZE);
+    listings = pageResult.rows;
+    listingsTotal = pageResult.total;
+    listingsPage = pageResult.page;
+    listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PAGE_SIZE));
   } catch (e) {
     configHint = isConfigError(e);
     errorMessage = formatLoadError(e);
   }
 
   const searchCtx = getMonitorSearchContext();
-  const recentRuns = await getRecentScrapeRuns(8);
+  const runsResult = await getScrapeRunsPage(rawRunsPage, RUNS_PAGE_SIZE);
+  const recentRuns = runsResult.rows;
+  const runsPage = runsResult.page;
+  const runsTotalPages = Math.max(1, Math.ceil(runsResult.total / RUNS_PAGE_SIZE));
+  const listingRangeStart =
+    listingsTotal === 0 ? 0 : (listingsPage - 1) * LISTINGS_PAGE_SIZE + 1;
+  const listingRangeEnd = Math.min(listingsPage * LISTINGS_PAGE_SIZE, listingsTotal);
 
   return (
     <div className={styles.shell}>
@@ -70,11 +115,11 @@ export default async function Home() {
             <p className={styles.tagline}>{searchCtx.tagline}</p>
           </div>
         </div>
-        {listings.length > 0 && !errorMessage && (
+        {listingsTotal > 0 && !errorMessage && (
           <div className={styles.stat}>
-            <span className={styles.statValue}>{listings.length}</span>
+            <span className={styles.statValue}>{listingsTotal}</span>
             <span className={styles.statLabel}>
-              {listings.length === 1 ? "listing" : "listings"} stored
+              {listingsTotal === 1 ? "listing" : "listings"} stored
             </span>
           </div>
         )}
@@ -87,16 +132,28 @@ export default async function Home() {
             <li key={`${i}-${label}`}>{label}</li>
           ))}
         </ul>
-        {searchCtx.gumtreeSearchUrl ? (
-          <a
-            className={styles.filterLink}
-            href={searchCtx.gumtreeSearchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on Gumtree ↗
-          </a>
-        ) : null}
+        <div className={styles.filterLinks}>
+          {searchCtx.gumtreeSearchUrl ? (
+            <a
+              className={styles.filterLink}
+              href={searchCtx.gumtreeSearchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on Gumtree ↗
+            </a>
+          ) : null}
+          {searchCtx.carsalesSearchUrl ? (
+            <a
+              className={styles.filterLink}
+              href={searchCtx.carsalesSearchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on Carsales ↗
+            </a>
+          ) : null}
+        </div>
       </section>
 
       {!errorMessage && (
@@ -115,6 +172,7 @@ export default async function Home() {
                     <th>Checked</th>
                     <th>New</th>
                     <th>Gumtree</th>
+                    <th>Carsales</th>
                     <th>Errors</th>
                     <th>Notes</th>
                   </tr>
@@ -128,6 +186,7 @@ export default async function Home() {
                         {r.new_listings}
                       </td>
                       <td>{r.gumtree_count}</td>
+                      <td>{r.carsales_count}</td>
                       <td>{r.errors}</td>
                       <td className={styles.scanNotes}>
                         {[r.gumtree_error, r.carsales_error].filter(Boolean).join(" · ") || "—"}
@@ -138,6 +197,12 @@ export default async function Home() {
               </table>
             </div>
           )}
+          <PagePagination
+            page={runsPage}
+            totalPages={runsTotalPages}
+            buildHref={(next) => homeHref(listingsPage, next)}
+            ariaLabel="Recent activity pages"
+          />
         </section>
       )}
 
@@ -161,7 +226,7 @@ export default async function Home() {
         </div>
       )}
 
-      {!errorMessage && listings.length === 0 && (
+      {!errorMessage && listingsTotal === 0 && (
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>No listings yet</p>
           <p className={styles.emptyText}>
@@ -171,50 +236,70 @@ export default async function Home() {
         </div>
       )}
 
-      {!errorMessage && listings.length > 0 && (
-        <ul className={styles.grid}>
-          {listings.map((row) => {
-            const src = getListingSource(row.id);
-            return (
-              <li key={row.id}>
-                <article className={styles.card}>
-                  <div className={styles.cardTop}>
-                    <span
-                      className={styles.badge}
-                      data-source={src.key}
-                    >
-                      {src.label}
-                    </span>
-                    <time
-                      className={styles.time}
-                      dateTime={row.created_at}
-                    >
-                      {formatWhen(row.created_at)}
-                    </time>
-                  </div>
-                  <h3 className={styles.cardTitle}>
-                    {row.title?.trim() || "Untitled listing"}
-                  </h3>
-                  <p className={styles.price}>{row.price || "—"}</p>
-                  {row.link ? (
-                    <a
-                      className={styles.link}
-                      href={row.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Open on listing site"
-                    >
-                      Open listing
-                      <span className={styles.linkArrow} aria-hidden>
-                        ↗
-                      </span>
-                    </a>
-                  ) : null}
-                </article>
-              </li>
-            );
-          })}
-        </ul>
+      {!errorMessage && listingsTotal > 0 && (
+        <section className={styles.listingsSection} aria-label="Stored listings">
+          <div className={styles.listingsSectionHeader}>
+            <h2 className={styles.sectionTitle}>Listings</h2>
+            <span className={styles.listingsRange}>
+              {listingRangeStart}–{listingRangeEnd} of {listingsTotal}
+            </span>
+          </div>
+          <ul className={styles.grid}>
+            {listings.map((row) => {
+              const src = getListingSource(row.id);
+              return (
+                <li key={row.id}>
+                  <article className={styles.card}>
+                    <div className={styles.cardHero} aria-hidden>
+                      <span className={styles.cardHeroIcon}>🚗</span>
+                      <span className={styles.cardHeroHint}>Photos on listing site</span>
+                    </div>
+                    <div className={styles.cardBody}>
+                      <div className={styles.cardTop}>
+                        <span
+                          className={styles.badge}
+                          data-source={src.key}
+                        >
+                          {src.label}
+                        </span>
+                        <time
+                          className={styles.time}
+                          dateTime={row.created_at}
+                        >
+                          {formatWhen(row.created_at)}
+                        </time>
+                      </div>
+                      <h3 className={styles.cardTitle}>
+                        {formatListingTitle(row.title, row.link)}
+                      </h3>
+                      <p className={styles.price}>{row.price || "—"}</p>
+                      {row.link ? (
+                        <a
+                          className={styles.link}
+                          href={row.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open on listing site"
+                        >
+                          Open listing
+                          <span className={styles.linkArrow} aria-hidden>
+                            ↗
+                          </span>
+                        </a>
+                      ) : null}
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+          <PagePagination
+            page={listingsPage}
+            totalPages={listingsTotalPages}
+            buildHref={(next) => homeHref(next, runsPage)}
+            ariaLabel="Listing pages"
+          />
+        </section>
       )}
 
       <footer className={styles.footer}>

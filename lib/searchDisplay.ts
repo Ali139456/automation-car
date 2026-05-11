@@ -7,6 +7,8 @@ export type MonitorSearchContext = {
   tagline: string;
   /** When set, same URL the scraper uses — for “open in browser”. */
   gumtreeSearchUrl: string | null;
+  /** When set, same URL the scraper uses — for “open in browser”. */
+  carsalesSearchUrl: string | null;
   /** Extra hint under empty state. */
   emptyHint: string | null;
 };
@@ -78,6 +80,7 @@ export function parseGumtreeUrlToChips(urlStr: string): string[] {
 
 export function getMonitorSearchContext(): MonitorSearchContext {
   const gumtreeUrl = process.env.GUMTREE_SEARCH_URL?.trim() || null;
+  const carsalesUrl = process.env.CARSALES_SEARCH_URL?.trim() || null;
 
   let filterChips: string[];
   let sectionTitle: string;
@@ -115,6 +118,7 @@ export function getMonitorSearchContext(): MonitorSearchContext {
     filterChips,
     tagline,
     gumtreeSearchUrl: gumtreeUrl,
+    carsalesSearchUrl: carsalesUrl,
     emptyHint: null,
   };
 }

@@ -67,3 +67,44 @@ export async function getRecentListings(limit = 200): Promise<ListingRow[]> {
   if (error) throw error;
   return (data as ListingRow[]) ?? [];
 }
+
+export type ListingsPageResult = {
+  rows: ListingRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * Paginated listings (newest first). Uses a head count plus range query.
+ */
+export async function getListingsPage(
+  page: number,
+  pageSize: number,
+): Promise<ListingsPageResult> {
+  const supabase = getSupabase();
+  const { count: totalCount, error: countErr } = await supabase
+    .from("listings_seen")
+    .select("*", { count: "exact", head: true });
+  if (countErr) throw countErr;
+
+  const total = totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const from = (safePage - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error } = await supabase
+    .from("listings_seen")
+    .select("id, title, price, link, created_at")
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+  return {
+    rows: (data as ListingRow[]) ?? [],
+    total,
+    page: safePage,
+    pageSize,
+  };
+}

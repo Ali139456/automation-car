@@ -5,6 +5,41 @@ import { getScrapeProxy } from "@/lib/scrapeProxy";
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+/** Axios timeout: Web Unlocker + heavy SERPs often need >35s. Override with SCRAPE_HTTP_TIMEOUT_MS. */
+function scrapeAxiosTimeoutMs(): number {
+  const raw = process.env.SCRAPE_HTTP_TIMEOUT_MS?.trim();
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 5_000) return Math.min(n, 300_000);
+  }
+  return getScrapeProxy() ? 120_000 : 35_000;
+}
+
+function isAxiosTimeoutError(e: unknown): boolean {
+  if (!isAxiosError(e)) return false;
+  if (e.code === "ECONNABORTED") return true;
+  const msg = (e.message ?? "").toLowerCase();
+  return msg.includes("timeout");
+}
+
+async function fetchHtmlViaPlaywrightFallback(url: string): Promise<string> {
+  console.warn(`[fetchHtml] falling back to Playwright for ${url}`);
+  const html2 = await fetchHtmlWithPlaywright(url);
+  if (looksLikeBotWallHtml(html2)) {
+    throw new Error(
+      isGumtreeUrl(url)
+        ? `Gumtree blocked after Playwright (Access denied / bot page). Fix: PLAYWRIGHT_CDP_URL with your Chrome (scripts/start-chrome-cdp.ps1), or residential IP / SCRAPE_HTTPS_PROXY.`
+        : `Blocked after Playwright (bot wall / Access denied). For AU sites via Bright Data, try username suffix -country-au on your zone user, or increase PLAYWRIGHT_TIMEOUT_MS.`,
+    );
+  }
+  if (isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(html2)) {
+    console.warn(
+      `[fetchHtml] Gumtree HTML after Playwright still has no /s-ad/ or ItemList (len=${html2.length}). Empty search or residual block.`,
+    );
+  }
+  return html2;
+}
+
 function isGumtreeUrl(url: string): boolean {
   return url.includes("gumtree.com.au");
 }
@@ -23,6 +58,8 @@ function shouldRetryWithPlaywright(args: {
 }): boolean {
   if (process.env.USE_PLAYWRIGHT === "false") return false;
   if (args.status === 403) return true;
+  // Proxy/upstream bad gateway (common with Bright Data on heavy SERP URLs); try full browser path.
+  if ([502, 504].includes(args.status)) return true;
   if ([401, 429, 503].includes(args.status)) return true;
   if (args.status === 200 && looksLikeBotWallHtml(args.html)) return true;
   if (
@@ -87,7 +124,7 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
   try {
     const proxyCfg = getScrapeProxy();
     const res = await axios.get<string>(url, {
-      timeout: 35_000,
+      timeout: scrapeAxiosTimeoutMs(),
       responseType: "text",
       // We'll decide how to handle status codes ourselves (so we can fall back to Playwright).
       validateStatus: () => true,
@@ -116,41 +153,23 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
       shouldRetryWithPlaywright({ status: res.status, html: res.data, url })
     ) {
       console.warn(`[fetchHtml] blocked/interstitial for ${url} (HTTP ${res.status}) — trying Playwright…`);
-      const html2 = await fetchHtmlWithPlaywright(url);
-      if (looksLikeBotWallHtml(html2)) {
-        throw new Error(
-          `Gumtree blocked after Playwright (Access denied / bot page). Fix: PLAYWRIGHT_CDP_URL with your Chrome (scripts/start-chrome-cdp.ps1), or residential IP / SCRAPE_HTTPS_PROXY.`,
-        );
-      }
-      if (isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(html2)) {
-        console.warn(
-          `[fetchHtml] Gumtree HTML after Playwright still has no /s-ad/ or ItemList (len=${html2.length}). Empty search or residual block.`,
-        );
-      }
-      return html2;
+      return fetchHtmlViaPlaywrightFallback(url);
     }
 
     throw new Error(`Unexpected response for ${url}: status ${res.status}`);
   } catch (e) {
     // `validateStatus: always true` means non-2xx/3xx are usually not thrown; this catch is for
     // real transport failures (TLS/DNS/timeouts) where we might still want Playwright sometimes.
+    if (process.env.USE_PLAYWRIGHT !== "false" && isAxiosTimeoutError(e)) {
+      console.warn(`[fetchHtml] axios timeout for ${url} — trying Playwright…`);
+      return fetchHtmlViaPlaywrightFallback(url);
+    }
     if (isAxiosError(e) && e.response && typeof e.response.data === "string") {
       const status = e.response.status ?? 0;
       const html = e.response.data;
       if (shouldRetryWithPlaywright({ status, html, url })) {
         console.warn(`[fetchHtml] blocked/interstitial for ${url} (HTTP ${status}) — trying Playwright…`);
-        const html2 = await fetchHtmlWithPlaywright(url);
-        if (looksLikeBotWallHtml(html2)) {
-          throw new Error(
-            `Gumtree blocked after Playwright (Access denied / bot page). Fix: PLAYWRIGHT_CDP_URL with your Chrome (scripts/start-chrome-cdp.ps1), or residential IP / SCRAPE_HTTPS_PROXY.`,
-          );
-        }
-        if (isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(html2)) {
-          console.warn(
-            `[fetchHtml] Gumtree HTML after Playwright still has no /s-ad/ or ItemList (len=${html2.length}). Empty search or residual block.`,
-          );
-        }
-        return html2;
+        return fetchHtmlViaPlaywrightFallback(url);
       }
     }
     throw e;
