@@ -21,8 +21,13 @@ function headless(): boolean {
 }
 
 function timeoutMs(): number {
-  const n = Number(process.env.PLAYWRIGHT_TIMEOUT_MS ?? "60000");
-  return Number.isFinite(n) && n > 0 ? n : 60_000;
+  const raw = process.env.PLAYWRIGHT_TIMEOUT_MS?.trim();
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return Math.min(n, 300_000);
+  }
+  // Gumtree + Web Unlocker often needs >60s to finish navigation on cloud hosts.
+  return getScrapeProxy() ? 120_000 : 60_000;
 }
 
 function postLoadWaitMs(): number {
@@ -81,7 +86,7 @@ function enqueuePlaywright<T>(task: () => Promise<T>): Promise<T> {
 }
 
 function isRetriableNavigationError(message: string): boolean {
-  return /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|Navigation timeout|Target page.*closed|has been closed|frame was detached/i.test(
+  return /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|Navigation timeout|Timeout \d+ms exceeded|timed out|Target page.*closed|has been closed|frame was detached/i.test(
     message,
   );
 }
@@ -99,15 +104,20 @@ function shouldResetBrowser(message: string): boolean {
  */
 async function gotoWithFallbacks(page: Page, url: string, gumtree: boolean): Promise<void> {
   const t = timeoutMs();
+  const proxied = Boolean(getScrapeProxy());
+  /** Through slow proxies, `commit` can take as long as a full navigation; cap only when no proxy. */
+  const commitTimeout = proxied ? t : Math.min(t, 25_000);
   const strategies: Array<{ waitUntil: NonNullable<Parameters<Page["goto"]>[1]>["waitUntil"] }> =
     gumtree
-      ? [{ waitUntil: "domcontentloaded" }, { waitUntil: "load" }, { waitUntil: "commit" }]
+      ? proxied
+        ? [{ waitUntil: "commit" }, { waitUntil: "domcontentloaded" }, { waitUntil: "load" }]
+        : [{ waitUntil: "domcontentloaded" }, { waitUntil: "load" }, { waitUntil: "commit" }]
       : [{ waitUntil: "domcontentloaded" }, { waitUntil: "load" }];
 
   let lastErr: unknown;
   for (const { waitUntil } of strategies) {
     try {
-      const effectiveTimeout = waitUntil === "commit" ? Math.min(t, 25_000) : t;
+      const effectiveTimeout = waitUntil === "commit" ? commitTimeout : t;
       await page.goto(url, { waitUntil, timeout: effectiveTimeout });
       return;
     } catch (e) {
