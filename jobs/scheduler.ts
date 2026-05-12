@@ -6,7 +6,7 @@ import { scrapeCarsales } from "@/lib/scrapers/carsales";
 import type { ProcessResult } from "@/services/processListings";
 import type { ScrapedListing } from "@/lib/listing";
 
-const DEFAULT_CRON = "*/4 * * * *"; /** every 4 minutes (within 3–5 min window) */
+const DEFAULT_CRON = "*/10 * * * *"; /** every 10 minutes */
 
 let started = false;
 
