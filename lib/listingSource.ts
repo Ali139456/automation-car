@@ -6,6 +6,6 @@ export function getListingSource(id: string): { key: string; label: string } {
   if (i <= 0) return { key: "unknown", label: "Unknown" };
   const key = id.slice(0, i);
   if (key === "gumtree") return { key, label: "Gumtree" };
-  if (key === "carsales") return { key, label: "carsales" };
+  if (key === "carsales") return { key, label: "Carsales" };
   return { key, label: key };
 }

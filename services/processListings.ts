@@ -1,3 +1,4 @@
+import { enrichScrapedListing } from "@/lib/enrichScrapedListing";
 import { checkIfExists, saveListing } from "@/lib/supabase";
 import type { ScrapedListing } from "@/lib/listing";
 import { notifyNewListing } from "@/services/notifications/telegram";
@@ -20,8 +21,9 @@ export async function processListings(listings: ScrapedListing[]): Promise<Proce
       const exists = await checkIfExists(listing.id);
       if (exists) continue;
 
-      await saveListing(listing);
-      await notifyNewListing(listing);
+      const row = enrichScrapedListing(listing);
+      await saveListing(row);
+      await notifyNewListing(row);
       newListings++;
     } catch (e) {
       errors++;

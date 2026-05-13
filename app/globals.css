@@ -1,15 +1,21 @@
 :root {
-  --bg-base: #080a0c;
-  --bg-elevated: #10161c;
-  --bg-card: rgba(16, 22, 30, 0.72);
-  --border: rgba(255, 255, 255, 0.08);
-  --text: #e8eaed;
-  --text-muted: #8b95a3;
-  --accent: #5eead4;
-  --accent-dim: rgba(94, 234, 212, 0.15);
+  --bg-base: #06080d;
+  --bg-elevated: #0c1018;
+  --surface: rgba(14, 18, 28, 0.92);
+  --surface-2: rgba(22, 28, 42, 0.85);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --accent: #2dd4bf;
+  --accent-muted: rgba(45, 212, 191, 0.35);
+  --link: #7dd3fc;
   --danger: #f87171;
   --radius: 12px;
   --radius-sm: 8px;
+  --radius-lg: 16px;
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.45);
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }

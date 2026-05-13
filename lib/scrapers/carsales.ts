@@ -3,6 +3,7 @@ import type { ScrapedListing } from "@/lib/listing";
 import { defaultSearchFilters } from "@/lib/listing";
 import { fetchHtml } from "@/lib/http";
 import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
+import { mergePreferRicher } from "@/lib/scrapedListingMerge";
 
 const BASE = "https://www.carsales.com.au/cars";
 
@@ -22,11 +23,6 @@ function buildSearchUrl(): string {
     "limit=24",
   ];
   return `${BASE}?${parts.join("&")}`;
-}
-
-function pushUnique(map: Map<string, ScrapedListing>, listing: ScrapedListing | null) {
-  if (!listing?.id) return;
-  if (!map.has(listing.id)) map.set(listing.id, listing);
 }
 
 function idFromCarsalesUrl(listingUrl: string): string | null {
@@ -54,7 +50,7 @@ function parseJsonLdListing(
   const link = url.startsWith("http") ? url : `https://www.carsales.com.au${url}`;
   const title = String(item.name ?? "Unknown");
 
-  pushUnique(map, {
+  mergePreferRicher(map, {
     id,
     title,
     price: formatPriceDisplay(n, typeof priceRaw === "string" ? priceRaw : undefined),
@@ -107,7 +103,7 @@ function parseHtmlCards(html: string, map: Map<string, ScrapedListing>) {
       card.find("[class*='price']").first().text().trim() || "";
     const n = parsePriceToNumber(priceTxt);
 
-    pushUnique(map, {
+    mergePreferRicher(map, {
       id,
       title,
       price: formatPriceDisplay(n, priceTxt || undefined),
@@ -126,8 +122,7 @@ export async function scrapeCarsales(): Promise<ScrapedListing[]> {
 
   const $ = cheerio.load(html);
   parseJsonLd($, map);
-
-  if (map.size === 0) parseHtmlCards(html, map);
+  parseHtmlCards(html, map);
 
   return [...map.values()];
 }

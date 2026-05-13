@@ -4,6 +4,7 @@ import { defaultSearchFilters } from "@/lib/listing";
 import { fetchHtml } from "@/lib/http";
 import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
 import { titleFromGumtreeLink } from "@/lib/listingDisplayTitle";
+import { mergePreferRicher } from "@/lib/scrapedListingMerge";
 
 const BASE = "https://www.gumtree.com.au";
 
@@ -26,29 +27,6 @@ function buildSearchUrl(): string {
     "order=recent",
   ];
   return `${BASE}/s-cars-vans-utes/c18320?${params.join("&")}`;
-}
-
-function listingQualityScore(l: ScrapedListing): number {
-  let s = 0;
-  const title = l.title?.trim().toLowerCase() ?? "";
-  if (title && title !== "unknown") s += 3;
-  const price = l.price?.trim() ?? "";
-  if (price && price !== "—" && !/^n\/a$/i.test(price)) s += 2;
-  if (l.link?.includes("/s-ad/")) s += 1;
-  return s;
-}
-
-/** Prefer richer rows (HTML parse) over weak JSON-LD placeholders with same id. */
-function mergeListing(map: Map<string, ScrapedListing>, listing: ScrapedListing | null) {
-  if (!listing?.id) return;
-  const existing = map.get(listing.id);
-  if (!existing) {
-    map.set(listing.id, listing);
-    return;
-  }
-  if (listingQualityScore(listing) > listingQualityScore(existing)) {
-    map.set(listing.id, listing);
-  }
 }
 
 function extractIdFromUrl(url: string): string | null {
@@ -78,7 +56,7 @@ function parseJsonLdItem(
     urlRaw.startsWith("http") ? urlRaw : urlRaw ? `${BASE}${urlRaw}` : BASE;
   const title = String(product.name ?? "Unknown");
 
-  mergeListing(map, {
+  mergePreferRicher(map, {
     id,
     title,
     price: formatPriceDisplay(n, typeof priceRaw === "string" ? priceRaw : undefined),
@@ -137,7 +115,7 @@ function parseNextData(html: string, map: Map<string, ScrapedListing>) {
       );
       const urlPath = String(ad.url ?? ad.adUrl ?? "");
       const link = urlPath.startsWith("http") ? urlPath : `${BASE}${urlPath}`;
-      mergeListing(map, {
+      mergePreferRicher(map, {
         id,
         title,
         price: formatPriceDisplay(
@@ -170,7 +148,7 @@ function parseHtml(html: string, map: Map<string, ScrapedListing>) {
     const n = parsePriceToNumber(priceTxt);
     const link = href.startsWith("http") ? href : `${BASE}${href}`;
 
-    mergeListing(map, {
+    mergePreferRicher(map, {
       id,
       title: title || "Unknown",
       price: formatPriceDisplay(n, priceTxt || undefined),
