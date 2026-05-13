@@ -37,6 +37,11 @@ async function fetchHtmlViaPlaywrightFallback(url: string): Promise<string> {
       `[fetchHtml] Gumtree HTML after Playwright still has no /s-ad/ or ItemList (len=${html2.length}). Empty search or residual block.`,
     );
   }
+  if (isCarsalesUrl(url) && carsalesHtmlMissingSearchResults(html2)) {
+    console.warn(
+      `[fetchHtml] Carsales HTML after Playwright still has no /cars/details/ (len=${html2.length}). Empty search or residual block.`,
+    );
+  }
   return html2;
 }
 
@@ -44,10 +49,22 @@ function isGumtreeUrl(url: string): boolean {
   return url.includes("gumtree.com.au");
 }
 
+function isCarsalesUrl(url: string): boolean {
+  return url.includes("carsales.com.au");
+}
+
 function gumtreePreferPlaywrightFirst(): boolean {
   if (process.env.USE_PLAYWRIGHT === "false") return false;
   if (process.env.GUMTREE_HTTP_FIRST === "true") return false;
   if (process.env.GUMTREE_PLAYWRIGHT_FIRST === "false") return false;
+  return true;
+}
+
+/** Same idea as Gumtree: axios often gets 502 / shell HTML from Carsales via datacenter proxies. */
+function carsalesPreferPlaywrightFirst(): boolean {
+  if (process.env.USE_PLAYWRIGHT === "false") return false;
+  if (process.env.CARSALES_HTTP_FIRST === "true") return false;
+  if (process.env.CARSALES_PLAYWRIGHT_FIRST === "false") return false;
   return true;
 }
 
@@ -66,6 +83,12 @@ function shouldRetryWithPlaywright(args: {
     args.status === 200 &&
     isGumtreeUrl(args.url) &&
     gumtreeHtmlMissingSearchResults(args.html)
+  )
+    return true;
+  if (
+    args.status === 200 &&
+    isCarsalesUrl(args.url) &&
+    carsalesHtmlMissingSearchResults(args.html)
   )
     return true;
   return false;
@@ -106,6 +129,18 @@ export function gumtreeHtmlMissingSearchResults(html: string): boolean {
   return true;
 }
 
+/**
+ * Carsales SERP should contain listing links; shell / challenge pages often do not.
+ */
+export function carsalesHtmlMissingSearchResults(html: string): boolean {
+  if (looksLikeBotWallHtml(html)) return true;
+  if (html.includes("/cars/details/")) return false;
+  const h = html.toLowerCase();
+  if (h.includes("itemlistelement")) return false;
+  if (/@type"\s*:\s*"itemlist/.test(html)) return false;
+  return true;
+}
+
 export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promise<string> {
   if (
     isGumtreeUrl(url) &&
@@ -116,6 +151,25 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
     if (looksLikeBotWallHtml(html)) {
       throw new Error(
         `Gumtree blocked HTML (bot wall / Access denied). Use real Chrome: PLAYWRIGHT_CDP_URL=http://127.0.0.1:9222 and run scripts/start-chrome-cdp.ps1, or change network. Set GUMTREE_HTTP_FIRST=true only to debug axios.`,
+      );
+    }
+    return html;
+  }
+
+  if (
+    isCarsalesUrl(url) &&
+    carsalesPreferPlaywrightFirst() &&
+    process.env.USE_PLAYWRIGHT !== "false"
+  ) {
+    const html = await fetchHtmlWithPlaywright(url);
+    if (looksLikeBotWallHtml(html)) {
+      throw new Error(
+        `Carsales blocked HTML (bot wall / Access denied). Try PLAYWRIGHT_CDP_URL with local Chrome, AU residential proxy (Bright Data: -country-au on the user), or CARSALES_HTTP_FIRST=true to retry plain HTTP only.`,
+      );
+    }
+    if (carsalesHtmlMissingSearchResults(html)) {
+      console.warn(
+        `[fetchHtml] Carsales Playwright HTML still has no /cars/details/ (len=${html.length}). Empty search or block.`,
       );
     }
     return html;
@@ -143,7 +197,8 @@ export async function fetchHtml(url: string, config?: AxiosRequestConfig): Promi
       res.status === 200 &&
       typeof res.data === "string" &&
       !looksLikeBotWallHtml(res.data) &&
-      !(isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(res.data))
+      !(isGumtreeUrl(url) && gumtreeHtmlMissingSearchResults(res.data)) &&
+      !(isCarsalesUrl(url) && carsalesHtmlMissingSearchResults(res.data))
     ) {
       return res.data;
     }

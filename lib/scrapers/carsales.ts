@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import type { ScrapedListing } from "@/lib/listing";
 import { defaultSearchFilters } from "@/lib/listing";
 import { fetchHtml } from "@/lib/http";
-import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
+import { formatPriceDisplay, parsePriceToNumber, offerPriceValue, coerceScrapedPrice } from "@/lib/parse";
 import { mergePreferRicher } from "@/lib/scrapedListingMerge";
 
 const BASE = "https://www.carsales.com.au/cars";
@@ -33,6 +33,126 @@ function idFromCarsalesUrl(listingUrl: string): string | null {
   return null;
 }
 
+const CS_ORIGIN = "https://www.carsales.com.au";
+
+function normalizeCarsalesLink(urlRaw: string): string {
+  const u = urlRaw.trim();
+  if (!u) return CS_ORIGIN;
+  if (u.startsWith("http")) return u;
+  return `${CS_ORIGIN}${u.startsWith("/") ? u : `/${u}`}`;
+}
+
+function listingUrlFromRecord(o: Record<string, unknown>): string {
+  const keys = [
+    "url",
+    "Url",
+    "href",
+    "Href",
+    "canonicalUrl",
+    "CanonicalUrl",
+    "detailUrl",
+    "DetailUrl",
+    "listingUrl",
+    "ListingUrl",
+    "permalink",
+    "Permalink",
+    "link",
+    "Link",
+  ];
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.includes("/cars/details/")) return v;
+  }
+  return "";
+}
+
+function tryMergeCarsalesRecord(o: Record<string, unknown>, map: Map<string, ScrapedListing>): void {
+  const urlRaw = listingUrlFromRecord(o);
+  if (!urlRaw) return;
+  const id = idFromCarsalesUrl(urlRaw);
+  if (!id) return;
+
+  const title = String(
+    o.name ??
+      o.title ??
+      o.Title ??
+      o.heading ??
+      o.Heading ??
+      o.listingTitle ??
+      o.ListingTitle ??
+      o.displayTitle ??
+      o.DisplayTitle ??
+      o.vehicleTitle ??
+      o.VehicleTitle ??
+      o.headline ??
+      "Unknown",
+  );
+
+  const offerPart = o.offers ?? o.Offers;
+  const flatPrice =
+    o.price ??
+    o.Price ??
+    o.displayPrice ??
+    o.DisplayPrice ??
+    o.egcPrice ??
+    o.EgcPrice ??
+    o.formattedPrice ??
+    o.FormattedPrice ??
+    o.priceLabel ??
+    o.PriceLabel;
+
+  let { n, displayText } = coerceScrapedPrice(flatPrice);
+  if (n <= 0) ({ n, displayText } = coerceScrapedPrice(offerPriceValue(offerPart)));
+
+  mergePreferRicher(map, {
+    id,
+    title,
+    price: formatPriceDisplay(n, displayText),
+    link: normalizeCarsalesLink(urlRaw),
+  });
+}
+
+function walkCarsalesJson(val: unknown, map: Map<string, ScrapedListing>, depth: number): void {
+  if (depth > 24 || val == null) return;
+  if (typeof val === "string") {
+    if (val.length > 12_000) return;
+    if (val.includes("/cars/details/")) {
+      const id = idFromCarsalesUrl(val);
+      if (id) {
+        mergePreferRicher(map, {
+          id,
+          title: "Unknown",
+          price: "—",
+          link: normalizeCarsalesLink(val),
+        });
+      }
+    }
+    return;
+  }
+  if (Array.isArray(val)) {
+    for (const el of val) walkCarsalesJson(el, map, depth + 1);
+    return;
+  }
+  if (typeof val === "object") {
+    tryMergeCarsalesRecord(val as Record<string, unknown>, map);
+    for (const v of Object.values(val as Record<string, unknown>)) {
+      walkCarsalesJson(v, map, depth + 1);
+    }
+  }
+}
+
+/** Carsales Next.js embeds listing payloads in __NEXT_DATA__ (not always in static anchors). */
+function parseCarsalesNextData(html: string, map: Map<string, ScrapedListing>): void {
+  const m = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+  if (!m?.[1]) return;
+  try {
+    const data = JSON.parse(m[1]) as Record<string, unknown>;
+    walkCarsalesJson(data, map, 0);
+  } catch {
+    /* skip */
+  }
+}
+
 function parseJsonLdListing(
   item: Record<string, unknown>,
   map: Map<string, ScrapedListing>,
@@ -41,11 +161,9 @@ function parseJsonLdListing(
   const id = idFromCarsalesUrl(url);
   if (!id) return;
 
-  const offers = (item.offers ?? {}) as Record<string, unknown>;
-  const priceRaw = offers.price;
-  const n = parsePriceToNumber(
-    typeof priceRaw === "number" ? priceRaw : String(priceRaw ?? ""),
-  );
+  const offers = item.offers;
+  const priceRaw = offerPriceValue(offers);
+  const { n, displayText } = coerceScrapedPrice(priceRaw);
 
   const link = url.startsWith("http") ? url : `https://www.carsales.com.au${url}`;
   const title = String(item.name ?? "Unknown");
@@ -53,7 +171,7 @@ function parseJsonLdListing(
   mergePreferRicher(map, {
     id,
     title,
-    price: formatPriceDisplay(n, typeof priceRaw === "string" ? priceRaw : undefined),
+    price: formatPriceDisplay(n, displayText),
     link,
   });
 }
@@ -83,6 +201,8 @@ function parseJsonLd($: cheerio.CheerioAPI, map: Map<string, ScrapedListing>) {
 
 function parseHtmlCards(html: string, map: Map<string, ScrapedListing>) {
   const $ = cheerio.load(html);
+  const priceSel =
+    "[data-testid*='price'],[data-testid*='Price'],[class*='price'],[class*='Price'],[class*='egc'],[class*='EGC'],[class*='vehicle-price']";
 
   let cards = $("[data-webm-searchlist]");
   if (!cards.length) cards = $(".listing-item");
@@ -98,9 +218,16 @@ function parseHtmlCards(html: string, map: Map<string, ScrapedListing>) {
 
     const url = href.startsWith("http") ? href : `https://www.carsales.com.au${href}`;
     const title =
-      card.find("h3, [class*='title'], .cs-text-bold").first().text().trim() || "Unknown";
-    const priceTxt =
-      card.find("[class*='price']").first().text().trim() || "";
+      card.find("h3, [class*='title'], .cs-text-bold, [class*='heading']").first().text().trim() ||
+      "Unknown";
+
+    let priceTxt = card.find(priceSel).first().text().trim();
+    if (!parsePriceToNumber(priceTxt)) {
+      let wrap = card.closest("[class*='listing'], [class*='vehicle'], article, li").first();
+      if (!wrap.length) wrap = card;
+      priceTxt = wrap.find(priceSel).first().text().trim();
+    }
+
     const n = parsePriceToNumber(priceTxt);
 
     mergePreferRicher(map, {
@@ -122,6 +249,7 @@ export async function scrapeCarsales(): Promise<ScrapedListing[]> {
 
   const $ = cheerio.load(html);
   parseJsonLd($, map);
+  parseCarsalesNextData(html, map);
   parseHtmlCards(html, map);
 
   return [...map.values()];

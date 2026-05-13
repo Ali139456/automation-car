@@ -102,13 +102,13 @@ function shouldResetBrowser(message: string): boolean {
 /**
  * WAFs often kill the document before `load` fires; `domcontentloaded` still yields the block / interstitial HTML.
  */
-async function gotoWithFallbacks(page: Page, url: string, gumtree: boolean): Promise<void> {
+async function gotoWithFallbacks(page: Page, url: string, heavySerp: boolean): Promise<void> {
   const t = timeoutMs();
   const proxied = Boolean(getScrapeProxy());
   /** Through slow proxies, `commit` can take as long as a full navigation; cap only when no proxy. */
   const commitTimeout = proxied ? t : Math.min(t, 25_000);
   const strategies: Array<{ waitUntil: NonNullable<Parameters<Page["goto"]>[1]>["waitUntil"] }> =
-    gumtree
+    heavySerp
       ? proxied
         ? [{ waitUntil: "commit" }, { waitUntil: "domcontentloaded" }, { waitUntil: "load" }]
         : [{ waitUntil: "domcontentloaded" }, { waitUntil: "load" }, { waitUntil: "commit" }]
@@ -133,6 +133,7 @@ async function gotoWithFallbacks(page: Page, url: string, gumtree: boolean): Pro
 async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
   const browser = await getBrowser();
   const gumtree = url.includes("gumtree.com.au");
+  const carsales = url.includes("carsales.com.au");
   const viaCdp = browserConnectionKind === "cdp";
   const proxyConfig = getScrapeProxy()?.playwright;
 
@@ -149,6 +150,7 @@ async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
       ...(gumtree ? { Referer: "https://www.gumtree.com.au/" } : {}),
+      ...(carsales ? { Referer: "https://www.carsales.com.au/" } : {}),
     },
   });
 
@@ -160,15 +162,24 @@ async function fetchHtmlWithPlaywrightInner(url: string): Promise<string> {
       });
     }
 
-    await gotoWithFallbacks(page, url, gumtree);
+    await gotoWithFallbacks(page, url, gumtree || carsales);
 
     if (postLoadWaitMs() > 0) {
       await delay(postLoadWaitMs());
     }
 
+    const cap = Math.min(45_000, Math.max(20_000, timeoutMs()));
     if (gumtree) {
-      const cap = Math.min(45_000, Math.max(20_000, timeoutMs()));
-      await page.waitForSelector('a[href*="/s-ad/"], [data-testid="srp-results"]', { timeout: cap }).catch(() => undefined);
+      await page
+        .waitForSelector('a[href*="/s-ad/"], [data-testid="srp-results"]', { timeout: cap })
+        .catch(() => undefined);
+    } else if (carsales) {
+      await page
+        .waitForSelector(
+          'a[href*="/cars/details/"], [data-webm-searchlist], [data-testid*="listing"], [class*="SearchResult"]',
+          { timeout: cap },
+        )
+        .catch(() => undefined);
     }
 
     const html = await page.content();
@@ -200,6 +211,8 @@ export async function fetchHtmlWithPlaywright(url: string): Promise<string> {
       const retryOnce =
         shouldResetBrowser(msg) ||
         (url.includes("gumtree.com.au") &&
+          /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|has been closed|Target page/i.test(msg)) ||
+        (url.includes("carsales.com.au") &&
           /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|has been closed|Target page/i.test(msg));
       if (retryOnce) {
         await resetBrowser();

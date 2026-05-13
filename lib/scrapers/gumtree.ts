@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import type { ScrapedListing } from "@/lib/listing";
 import { defaultSearchFilters } from "@/lib/listing";
 import { fetchHtml } from "@/lib/http";
-import { formatPriceDisplay, parsePriceToNumber } from "@/lib/parse";
+import { formatPriceDisplay, parsePriceToNumber, offerPriceValue, coerceScrapedPrice } from "@/lib/parse";
 import { titleFromGumtreeLink } from "@/lib/listingDisplayTitle";
 import { mergePreferRicher } from "@/lib/scrapedListingMerge";
 
@@ -46,11 +46,9 @@ function parseJsonLdItem(
   const id = extractIdFromUrl(urlRaw);
   if (!id) return;
 
-  const offers = product.offers as Record<string, unknown> | undefined;
-  const priceRaw = offers?.price;
-  const n = parsePriceToNumber(
-    typeof priceRaw === "number" ? priceRaw : String(priceRaw ?? ""),
-  );
+  const offers = product.offers;
+  const priceRaw = offerPriceValue(offers);
+  const { n, displayText } = coerceScrapedPrice(priceRaw);
 
   const link =
     urlRaw.startsWith("http") ? urlRaw : urlRaw ? `${BASE}${urlRaw}` : BASE;
@@ -59,7 +57,7 @@ function parseJsonLdItem(
   mergePreferRicher(map, {
     id,
     title,
-    price: formatPriceDisplay(n, typeof priceRaw === "string" ? priceRaw : undefined),
+    price: formatPriceDisplay(n, displayText),
     link,
   });
 }
@@ -109,19 +107,22 @@ function parseNextData(html: string, map: Map<string, ScrapedListing>) {
       if (!native) continue;
       const id = `gumtree:${native}`;
       const title = String(ad.title ?? ad.adTitle ?? "Unknown");
-      const priceField = ad.price ?? ad.priceText ?? 0;
-      const n = parsePriceToNumber(
-        typeof priceField === "number" ? priceField : String(priceField ?? ""),
-      );
+      const priceCandidate =
+        ad.price ??
+        ad.priceText ??
+        ad.displayPrice ??
+        ad.formattedPrice ??
+        ad.egcPrice ??
+        ad.dapPrice ??
+        ad.priceDetail ??
+        ad.pricing;
+      const { n, displayText } = coerceScrapedPrice(priceCandidate);
       const urlPath = String(ad.url ?? ad.adUrl ?? "");
       const link = urlPath.startsWith("http") ? urlPath : `${BASE}${urlPath}`;
       mergePreferRicher(map, {
         id,
         title,
-        price: formatPriceDisplay(
-          n,
-          typeof priceField === "string" ? priceField : undefined,
-        ),
+        price: formatPriceDisplay(n, displayText),
         link,
       });
     }
@@ -132,19 +133,44 @@ function parseNextData(html: string, map: Map<string, ScrapedListing>) {
 
 function parseHtml(html: string, map: Map<string, ScrapedListing>) {
   const $ = cheerio.load(html);
+  const priceSel =
+    "[data-testid*='price'],[data-testid*='Price'],[class*='user-ad-price'],[class*='price__'],[class*='Price'],[class*='ad-price']";
 
   $("a[href*='/s-ad/']").each((_, el) => {
-    const href = $(el).attr("href") ?? "";
+    const $link = $(el);
+    const href = $link.attr("href") ?? "";
     if (!href.includes("/s-ad/")) return;
     const id = extractIdFromUrl(href);
     if (!id) return;
-    const card = $(el);
+
+    let card = $link.closest('[data-q="search-result-ad"]').first();
+    if (!card.length) card = $link.closest("[class*='user-ad-row']").first();
+    if (!card.length) card = $link.closest("[class*='user-ad-collection']").first();
+    if (!card.length) card = $link.closest("article").first();
+    if (!card.length) card = $link;
+
     const title =
       card.find("h3, .user-ad-row-title-style, span[class*='title']").first().text().trim() ||
-      card.attr("aria-label")?.trim() ||
+      $link.find("h3, span[class*='title']").first().text().trim() ||
+      $link.attr("aria-label")?.trim() ||
       "Unknown";
-    const priceTxt =
-      card.find("[class*='user-ad-price'], [class*='price']").first().text().trim() || "";
+
+    let priceTxt = card.find(priceSel).first().text().trim();
+    if (!parsePriceToNumber(priceTxt)) {
+      priceTxt = $link.find(priceSel).first().text().trim();
+    }
+    if (!parsePriceToNumber(priceTxt)) {
+      let p: ReturnType<typeof $link.parent> = $link.parent();
+      for (let i = 0; i < 6 && p.length; i++) {
+        const t = p.find(priceSel).first().text().trim();
+        if (parsePriceToNumber(t)) {
+          priceTxt = t;
+          break;
+        }
+        p = p.parent();
+      }
+    }
+
     const n = parsePriceToNumber(priceTxt);
     const link = href.startsWith("http") ? href : `${BASE}${href}`;
 

@@ -6,7 +6,15 @@ export function listingQualityScore(l: ScrapedListing): number {
   const title = l.title?.trim().toLowerCase() ?? "";
   if (title && title !== "unknown") s += 3;
   const price = l.price?.trim() ?? "";
-  if (price && price !== "—" && !/^n\/a$/i.test(price)) s += 2;
+  if (
+    price &&
+    price !== "—" &&
+    !/^n\/a$/i.test(price) &&
+    !/^see (ad|listing)/i.test(price) &&
+    /\d/.test(price)
+  ) {
+    s += 2;
+  }
   if (l.link?.includes("/s-ad/") || l.link?.includes("/cars/details/")) s += 1;
   return s;
 }
