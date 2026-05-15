@@ -5,6 +5,27 @@ const TELEGRAM_API_TIMEOUT_MS = Number(
   process.env.TELEGRAM_API_TIMEOUT_MS ?? "60000",
 );
 
+/** BOM / quotes / whitespace from copy-paste in Railway or .env */
+function normalizeTelegramEnv(raw: string | undefined): string | undefined {
+  if (raw == null) return undefined;
+  let s = raw.replace(/^\uFEFF/, "").trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s || undefined;
+}
+
+let loggedChatSuffix = false;
+
+function logConfiguredChatOnce(chatId: string): void {
+  if (loggedChatSuffix) return;
+  loggedChatSuffix = true;
+  const tail = chatId.length <= 4 ? "****" : chatId.slice(-4);
+  console.info(
+    `[telegram] Using TELEGRAM_CHAT_ID (last 4 chars: ${tail}, length=${chatId.length}) — if alerts go to the wrong chat, update this env where the server runs (e.g. Railway) and redeploy.`,
+  );
+}
+
 function parseChatId(raw: string): string | number {
   const t = raw.trim();
   if (/^-?\d+$/.test(t)) {
@@ -28,12 +49,14 @@ function formatNewListingMessage(listing: ScrapedListing): string {
  * Sends a plain-text message via Telegram Bot API (requires TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID).
  */
 export async function sendTelegramMessage(message: string): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const token = normalizeTelegramEnv(process.env.TELEGRAM_BOT_TOKEN);
+  const chatId = normalizeTelegramEnv(process.env.TELEGRAM_CHAT_ID);
 
   if (!token || !chatId) {
     throw new Error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
   }
+
+  logConfiguredChatOnce(chatId);
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const chatIdValue = parseChatId(chatId);

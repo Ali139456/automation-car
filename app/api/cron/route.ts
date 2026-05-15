@@ -6,6 +6,7 @@ import { isPlaywrightCdpConfigured } from "@/lib/playwrightCdp";
 /**
  * Trigger a scan manually or from Railway Cron / external scheduler.
  * GET /api/cron?secret=YOUR_CRON_SECRET
+ * GET /api/cron?secret=…&telegram_ping=1 — send one test Telegram using current TELEGRAM_* env (verify new bot/chat).
  * GET /api/cron?secret=…&diagnose=1 — fetch Gumtree once and return HTML heuristics (when examined is 0).
  */
 export async function GET(request: Request) {
@@ -16,6 +17,20 @@ export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET ?? "";
   if (!expected || secret !== expected) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (url.searchParams.get("telegram_ping") === "1") {
+    const { sendTelegramMessage } = await import("@/services/notifications/telegram");
+    try {
+      await sendTelegramMessage(
+        "Car Monitor: Telegram ping OK. This message used TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID from this server.",
+      );
+      return NextResponse.json({ ok: true, telegram: "message sent" });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[api/cron] telegram_ping failed:", e);
+      return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
   }
 
   if (url.searchParams.get("diagnose") === "1") {
